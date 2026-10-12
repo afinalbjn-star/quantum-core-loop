@@ -1,0 +1,7 @@
+frames/
+*.png
+*.blend1
+ref_*.py
+workflow_*.txt
+workflow_*.yml
+output/

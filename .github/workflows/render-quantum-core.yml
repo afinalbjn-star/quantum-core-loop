@@ -1,0 +1,105 @@
+name: Render 3D Quantum AI Core (Alpha Channel)
+
+on:
+  workflow_dispatch:
+    inputs:
+      engine:
+        description: "Render engine (cycles / eevee)"
+        required: false
+        default: "cycles"
+        type: choice
+        options:
+          - "cycles"
+          - "eevee"
+      samples:
+        description: "Samples per frame"
+        required: false
+        default: "32"
+        type: choice
+        options:
+          - "16"
+          - "32"
+          - "64"
+      start_frame:
+        description: "First frame"
+        required: false
+        default: "1"
+      end_frame:
+        description: "Last frame (150 = 5s seamless loop)"
+        required: false
+        default: "150"
+  push:
+    branches:
+      - main
+
+env:
+  PYTHONUNBUFFERED: "1"
+  BLEND: blender-stock/quantum_ai_core_seamless.blend
+  FRAMES_DIR: blender-stock/render
+  OUT_DIR: blender-stock/output
+
+jobs:
+  render:
+    name: Render 3D Quantum Core Alpha
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Free Disk Space
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/share/dotnet
+
+      - name: Setup Blender 5.2
+        uses: bradyajohnston/setup-blender@v5
+        with:
+          version: "5.2"
+
+      - name: Verify Blender Installation
+        run: blender --version
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Create Directories
+        run: mkdir -p "${{ env.FRAMES_DIR }}" "${{ env.OUT_DIR }}"
+
+      - name: Render Animation
+        env:
+          ENGINE: ${{ github.event.inputs.engine || 'cycles' }}
+          SAMPLES: ${{ github.event.inputs.samples || '32' }}
+          START_FRAME: ${{ github.event.inputs.start_frame || '1' }}
+          END_FRAME: ${{ github.event.inputs.end_frame || '150' }}
+          FRAMES_DIR: ${{ env.FRAMES_DIR }}
+          RES_X: "1920"
+          RES_Y: "1080"
+          FPS: "30"
+          CYCLES_THREADS: "32"
+        run: |
+          echo "Rendering frames ${{ env.START_FRAME }}-${{ env.END_FRAME }} (Alpha Channel 16-bit RGBA)"
+          blender -b "${{ env.BLEND }}" \
+            -P blender-stock/ci_settings.py \
+            -a
+
+      - name: Encode Stock Delivery Videos (ProRes 4444 Alpha, WebM, MP4)
+        env:
+          FPS: "30"
+          EXPECTED_FRAMES: "150"
+        run: |
+          python blender-stock/encode.py "${{ env.FRAMES_DIR }}" "${{ env.OUT_DIR }}"
+
+      - name: Upload Final Video Delivery Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuantumCore-3D-Alpha-Delivery
+          path: |
+            ${{ env.OUT_DIR }}/*.mov
+            ${{ env.OUT_DIR }}/*.webm
+            ${{ env.OUT_DIR }}/*.mp4
+            ${{ env.OUT_DIR }}/*.png
+          retention-days: 30
+          if-no-files-found: error
